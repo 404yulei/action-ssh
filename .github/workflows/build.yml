@@ -8,10 +8,7 @@ jobs:
       run: git clone https://github.com/404yulei/kernel_xiaomi_pissarro pissarro
 
     - name: cd pissarro
-      run: cd pissarro
-
-    - name: chmod
-      run: ls
-
-    - name: start build
-      run: ./build.sh
+      run: |
+        cd pissarro
+        chmod 777 build.sh
+        ./build.sh
