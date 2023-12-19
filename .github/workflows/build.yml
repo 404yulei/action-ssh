@@ -1,0 +1,17 @@
+name: CI
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: git clone
+      run: git clone https://github.com/404yulei/kernel_xiaomi_pissarro pissarro
+
+    - name: cd pissarro
+      run: cd pissarro
+
+    - name: chmod
+      run: chmod 777 build.sh
+
+    - name: start build
+      run: ./build.sh
