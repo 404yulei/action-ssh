@@ -11,7 +11,7 @@ jobs:
       run: cd pissarro
 
     - name: chmod
-      run: chmod 777 build.sh
+      run: ls
 
     - name: start build
       run: ./build.sh
