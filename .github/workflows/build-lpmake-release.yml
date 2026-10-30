@@ -68,17 +68,7 @@ jobs:
             external/selinux \
             external/pcre
 
-      - name: Verify Python from build-tools
-        run: |
-          PYTHON_BIN="prebuilts/build-tools/path/linux-x86/python3"
-          if [ ! -x "$PYTHON_BIN" ]; then
-            echo "ERROR: Python3 not found at $PYTHON_BIN"
-            echo "Listing available python-related files under prebuilts/build-tools:"
-            find prebuilts/build-tools -name 'python*' -type f 2>/dev/null | head -20
-            exit 1
-          fi
-          echo "Found Python: $PYTHON_BIN"
-          "$PYTHON_BIN" --version
+
 
       - name: Verify ninja
         run: |
