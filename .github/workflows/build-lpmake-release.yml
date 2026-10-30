@@ -59,6 +59,10 @@ jobs:
             build/soong \
             build/make \
             build/blueprint \
+            prebuilts/go/linux-x86 \
+            prebuilts/build-tools \
+            prebuilts/ninja/linux-x86 \
+            prebuilts/python/linux-x86/2.7.5 \
             system/core \
             system/extras \
             external/e2fsprogs \
