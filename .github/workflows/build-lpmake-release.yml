@@ -61,7 +61,6 @@ jobs:
             build/blueprint \
             prebuilts/go/linux-x86 \
             prebuilts/build-tools \
-            prebuilts/ninja/linux-x86 \
             prebuilts/python/linux-x86/2.7.5 \
             system/core \
             system/extras \
@@ -69,6 +68,11 @@ jobs:
             external/zlib \
             external/selinux \
             external/pcre
+
+      - name: Verify ninja
+        run: |
+          ls -l prebuilts/build-tools/linux-x86/bin/ninja
+          prebuilts/build-tools/linux-x86/bin/ninja --version
 
       # ── 5. 编译 lpmake ──────────────────────────────────────────
       - name: Build lpmake
