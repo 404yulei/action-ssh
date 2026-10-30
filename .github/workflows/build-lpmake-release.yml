@@ -70,10 +70,7 @@ jobs:
 
 
 
-      - name: Verify ninja
-        run: |
-          ls -l prebuilts/build-tools/linux-x86/bin/ninja
-          prebuilts/build-tools/linux-x86/bin/ninja --version
+
 
       # ── 5. 编译 lpmake ──────────────────────────────────────────
       - name: Build lpmake
