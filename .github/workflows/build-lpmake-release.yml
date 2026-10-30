@@ -60,16 +60,11 @@ jobs:
             build/make \
             build/blueprint \
             system/core \
-            system/libbase \
-            system/libcutils \
-            system/libutils \
-            system/logging \
             system/extras \
             external/e2fsprogs \
             external/zlib \
             external/selinux \
-            external/pcre \
-            frameworks/base  # 某些版本 lpmake 的 bp 可能间接引用这里的头文件，保留以防万一
+            external/pcre
 
       # ── 5. 编译 lpmake ──────────────────────────────────────────
       - name: Build lpmake
