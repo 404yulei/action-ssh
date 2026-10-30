@@ -68,6 +68,11 @@ jobs:
             external/selinux \
             external/pcre
 
+      - name: Verify Python from build-tools
+        run: |
+          ls -l prebuilts/build-tools/linux-x86/bin/python*
+          prebuilts/build-tools/linux-x86/bin/python3 --version
+
       - name: Verify ninja
         run: |
           ls -l prebuilts/build-tools/linux-x86/bin/ninja
