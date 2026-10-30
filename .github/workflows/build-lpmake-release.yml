@@ -1,0 +1,115 @@
+name: Build lpmake & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # 只在推送 v 开头的 tag 时触发，避免每次 commit 都编译
+  workflow_dispatch:   # 也允许手动触发调试
+
+permissions:
+  contents: write      # 创建 Release 和上传资产必需
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # GitHub Actions 上限 360 分钟，留一点余量
+
+    steps:
+      # ── 1. 释放磁盘空间 ──────────────────────────────────────────
+      - name: Free disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/graalvm
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo apt-get clean
+          echo "=== After cleanup ==="
+          df -h /
+
+      # ── 2. 安装 repo 工具 ────────────────────────────────────────
+      - name: Install repo
+        run: |
+          mkdir -p ~/bin
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      # ── 3. 初始化 AOSP 仓库（浅克隆 + 部分克隆，节省空间与时间）──
+      - name: Repo init
+        run: |
+          mkdir -p aosp && cd aosp
+          repo init \
+            -u https://android.googlesource.com/platform/manifest \
+            -b android-15.0.0_r25 \
+            --depth=1 \
+            --partial-clone \
+            --clone-filter=blob:limit=10M
+
+      # ── 4. 精简同步：只拉取编译 lpmake 所需的核心项目 ───────────
+      - name: Minimal repo sync
+        run: |
+          cd aosp
+          repo sync -c -j$(nproc) --force-sync --no-tags --no-clone-bundle \
+            build/soong \
+            build/make \
+            build/blueprint \
+            system/core \
+            system/libbase \
+            system/libcutils \
+            system/libutils \
+            system/logging \
+            system/extras \
+            external/e2fsprogs \
+            external/zlib \
+            external/selinux \
+            external/pcre \
+            frameworks/base  # 某些版本 lpmake 的 bp 可能间接引用这里的头文件，保留以防万一
+
+      # ── 5. 编译 lpmake ──────────────────────────────────────────
+      - name: Build lpmake
+        run: |
+          cd aosp
+          source build/envsetup.sh
+          lunch aosp_arm64-trunk_staging-eng
+          make lpmake -j$(nproc)
+
+      # ── 6. 定位并准备发布文件 ──────────────────────────────────
+      - name: Collect lpmake binary
+        run: |
+          cd aosp
+          LPMake_PATH=$(find out/host/linux-x86/bin -name lpmake -type f | head -n 1)
+          if [ -z "$LPMake_PATH" ]; then
+            echo "ERROR: lpmake binary not found under out/host/linux-x86/bin"
+            find out/host -name 'lpmake*' 2>/dev/null || true
+            exit 1
+          fi
+          echo "Found: $LPMake_PATH"
+          mkdir -p "${GITHUB_WORKSPACE}/release-assets"
+          cp "$LPMake_PATH" "${GITHUB_WORKSPACE}/release-assets/lpmake"
+          # 可选：同时打包 lpmake 所依赖的运行时库（如果动态链接）
+          # cp out/host/linux-x86/lib64/libbase.so "${GITHUB_WORKSPACE}/release-assets/" 2>/dev/null || true
+          file "${GITHUB_WORKSPACE}/release-assets/lpmake"
+          ldd "${GITHUB_WORKSPACE}/release-assets/lpmake" || true
+
+      # ── 7. 上传为 Actions Artifact（便于非 tag 场景下载调试）────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lpmake-${{ github.ref_name }}
+          path: release-assets/
+
+      # ── 8. 发布到 GitHub Release（仅 tag 触发时执行）────────────
+      - name: Release to GitHub
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/lpmake
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
