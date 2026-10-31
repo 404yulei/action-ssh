@@ -85,7 +85,7 @@ jobs:
         run: |
           cd aosp
           source build/envsetup.sh
-          lunch aosp_arm64-trunk_staging-eng
+          lunch aosp_arm64-ap3a-eng
           make lpmake -j$(nproc)
 
       - name: Collect lpmake binary
