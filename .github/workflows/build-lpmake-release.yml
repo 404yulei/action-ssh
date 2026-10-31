@@ -66,7 +66,8 @@ jobs:
             external/e2fsprogs \
             external/zlib \
             external/selinux \
-            external/pcre
+            external/pcre \
+            external/golang-protobuf
 
       # ── 5. 验证关键工具链（Python 3 与 Ninja）────────────────────
       - name: Verify Python and Ninja
