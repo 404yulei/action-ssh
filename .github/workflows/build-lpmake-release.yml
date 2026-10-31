@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # 独立编译非常快，30分钟绰绰有余
+    timeout-minutes: 30
 
     steps:
       - name: Checkout android-lptools
@@ -20,13 +20,29 @@ jobs:
         with:
           repository: itsNileshHere/android-lptools
           path: android-lptools
-          # 如果希望固定版本，可以取消注释并指定 branch 或 ref
-          # ref: android-14 
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential make
+
+      # ── 修复 GCC 14+ 缺少 <algorithm> 头文件的问题 ──────────────
+      - name: Patch utility.cpp for std::find
+        run: |
+          TARGET_FILE="android-lptools/lib/liblp/utility.cpp"
+          if [ ! -f "$TARGET_FILE" ]; then
+            echo "ERROR: $TARGET_FILE not found"
+            exit 1
+          fi
+          # 检查是否已包含 <algorithm>，避免重复插入
+          if grep -q '#include <algorithm>' "$TARGET_FILE"; then
+            echo "Header already present, skipping patch."
+          else
+            # 在文件第一行插入 #include <algorithm>
+            sed -i '1i #include <algorithm>' "$TARGET_FILE"
+            echo "Patched successfully. New first lines:"
+            head -5 "$TARGET_FILE"
+          fi
 
       - name: Build lpmake and other tools
         run: |
@@ -46,16 +62,12 @@ jobs:
           fi
           echo "Found lpmake:"
           file "$LPMake_BIN"
-          # 简单验证可执行性（输出 usage 信息即视为正常）
           "$LPMake_BIN" --help 2>&1 | head -5 || true
 
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
           cp android-lptools/bin/lpmake release-assets/lpmake
-          # 可选：一并打包 lpunpack、lpdump 等常用工具
-          # cp android-lptools/bin/lpunpack release-assets/ 2>/dev/null || true
-          # cp android-lptools/bin/lpdump release-assets/ 2>/dev/null || true
           ls -l release-assets/
 
       - name: Upload artifact
