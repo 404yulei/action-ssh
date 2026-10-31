@@ -3,16 +3,16 @@ name: Build lpmake & Release
 on:
   push:
     tags:
-      - 'v*'          # 只在推送 v 开头的 tag 时触发，避免每次 commit 都编译
-  workflow_dispatch:   # 也允许手动触发调试
+      - 'v*'                # 推送 v 开头 tag 时触发编译并发布
+  workflow_dispatch:        # 支持手动触发，便于调试
 
 permissions:
-  contents: write      # 创建 Release 和上传资产必需
+  contents: write           # 创建 Release 和上传资产必需
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 350   # GitHub Actions 上限 360 分钟，留一点余量
+    timeout-minutes: 350    # 预留充足时间，避免同步/编译超时
 
     steps:
       # ── 1. 释放磁盘空间 ──────────────────────────────────────────
@@ -40,18 +40,16 @@ jobs:
           chmod a+x ~/bin/repo
           echo "$HOME/bin" >> $GITHUB_PATH
 
-      # ── 3. 初始化 AOSP 仓库（浅克隆 + 部分克隆，节省空间与时间）──
+      # ── 3. 初始化 AOSP（已移除 partial-clone，确保所有文件被拉取）──
       - name: Repo init
         run: |
           mkdir -p aosp && cd aosp
           repo init \
             -u https://android.googlesource.com/platform/manifest \
             -b android-15.0.0_r25 \
-            --depth=1 \
-            --partial-clone \
-            --clone-filter=blob:limit=10M
+            --depth=1
 
-      # ── 4. 精简同步：只拉取编译 lpmake 所需的核心项目 ───────────
+      # ── 4. 精简同步：覆盖 lpmake 编译所需的全部关键项目 ──────────
       - name: Minimal repo sync
         run: |
           cd aosp
@@ -61,18 +59,44 @@ jobs:
             build/blueprint \
             prebuilts/go/linux-x86 \
             prebuilts/build-tools \
+            prebuilts/clang/host/linux-x86 \
             system/core \
+            system/logging \
             system/extras \
             external/e2fsprogs \
             external/zlib \
             external/selinux \
             external/pcre
 
+      # ── 5. 验证关键工具链（Python 3 与 Ninja）────────────────────
+      - name: Verify Python and Ninja
+        run: |
+          cd aosp
 
+          # 验证 Python 3（优先使用 build-tools/path 下的版本）
+          PYTHON_BIN="prebuilts/build-tools/path/linux-x86/python3"
+          if [ ! -x "$PYTHON_BIN" ]; then
+            echo "Python3 not found at $PYTHON_BIN, trying alternate location..."
+            PYTHON_BIN="prebuilts/build-tools/linux-x86/bin/python3"
+          fi
+          if [ ! -x "$PYTHON_BIN" ]; then
+            echo "ERROR: Python3 still not found. Listing python-related files:"
+            find prebuilts/build-tools -name 'python*' -type f 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "Found Python: $PYTHON_BIN"
+          "$PYTHON_BIN" --version
 
+          # 验证 Ninja
+          NINJA_BIN="prebuilts/build-tools/linux-x86/bin/ninja"
+          if [ ! -x "$NINJA_BIN" ]; then
+            echo "ERROR: Ninja not found at $NINJA_BIN"
+            exit 1
+          fi
+          echo "Found Ninja: $NINJA_BIN"
+          "$NINJA_BIN" --version
 
-
-      # ── 5. 编译 lpmake ──────────────────────────────────────────
+      # ── 6. 编译 lpmake ──────────────────────────────────────────
       - name: Build lpmake
         run: |
           cd aosp
@@ -80,32 +104,30 @@ jobs:
           lunch aosp_arm64-trunk_staging-eng
           make lpmake -j$(nproc)
 
-      # ── 6. 定位并准备发布文件 ──────────────────────────────────
+      # ── 7. 收集二进制文件 ──────────────────────────────────────
       - name: Collect lpmake binary
         run: |
           cd aosp
-          LPMake_PATH=$(find out/host/linux-x86/bin -name lpmake -type f | head -n 1)
-          if [ -z "$LPMake_PATH" ]; then
-            echo "ERROR: lpmake binary not found under out/host/linux-x86/bin"
-            find out/host -name 'lpmake*' 2>/dev/null || true
+          LPMake_PATH="out/host/linux-x86/bin/lpmake"
+          if [ ! -f "$LPMake_PATH" ]; then
+            echo "ERROR: lpmake not found at $LPMake_PATH"
+            find out/host -name 'lpmake*' -type f 2>/dev/null || true
             exit 1
           fi
           echo "Found: $LPMake_PATH"
           mkdir -p "${GITHUB_WORKSPACE}/release-assets"
           cp "$LPMake_PATH" "${GITHUB_WORKSPACE}/release-assets/lpmake"
-          # 可选：同时打包 lpmake 所依赖的运行时库（如果动态链接）
-          # cp out/host/linux-x86/lib64/libbase.so "${GITHUB_WORKSPACE}/release-assets/" 2>/dev/null || true
           file "${GITHUB_WORKSPACE}/release-assets/lpmake"
           ldd "${GITHUB_WORKSPACE}/release-assets/lpmake" || true
 
-      # ── 7. 上传为 Actions Artifact（便于非 tag 场景下载调试）────
+      # ── 8. 上传为 Actions Artifact（便于非 tag 场景下载）────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: lpmake-${{ github.ref_name }}
           path: release-assets/
 
-      # ── 8. 发布到 GitHub Release（仅 tag 触发时执行）────────────
+      # ── 9. 发布到 GitHub Release（仅 tag 触发）──────────────────
       - name: Release to GitHub
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
